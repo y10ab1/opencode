@@ -49,6 +49,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 const HomeRoute = lazy(() => import("@/pages/home"))
 const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
+const SetupWizardLazy = lazy(() => import("@/components/setup-wizard").then((m) => ({ default: m.SetupWizard })))
 const Loading = () => <div class="size-full" />
 
 if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
@@ -77,6 +78,8 @@ declare global {
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+      completeSetup?: () => Promise<void>
+      setupAutoReports?: (enabled: boolean) => Promise<void>
     }
   }
 }
@@ -282,7 +285,10 @@ export function AppInterface(props: {
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
+  isFirstRun?: boolean
 }) {
+  const [showSetup, setShowSetup] = createSignal(props.isFirstRun ?? false)
+
   return (
     <ServerProvider
       defaultServer={props.defaultServer}
@@ -294,16 +300,25 @@ export function AppInterface(props: {
           <QueryProvider>
             <GlobalSDKProvider>
               <GlobalSyncProvider>
-                <Dynamic
-                  component={props.router ?? Router}
-                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                <Show
+                  when={!showSetup()}
+                  fallback={
+                    <Suspense fallback={<div class="size-full" />}>
+                      <SetupWizardLazy onComplete={() => setShowSetup(false)} />
+                    </Suspense>
+                  }
                 >
-                  <Route path="/" component={HomeRoute} />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={SessionIndexRoute} />
-                    <Route path="/session/:id?" component={SessionRoute} />
-                  </Route>
-                </Dynamic>
+                  <Dynamic
+                    component={props.router ?? Router}
+                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                  >
+                    <Route path="/" component={HomeRoute} />
+                    <Route path="/:dir" component={DirectoryLayout}>
+                      <Route path="/" component={SessionIndexRoute} />
+                      <Route path="/session/:id?" component={SessionRoute} />
+                    </Route>
+                  </Dynamic>
+                </Show>
               </GlobalSyncProvider>
             </GlobalSDKProvider>
           </QueryProvider>

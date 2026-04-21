@@ -1,0 +1,38 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llm-proxy": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LLM API Proxy",
+      "options": {
+        "baseURL": "https://llm-api-proxy.gamaniaocc.org/v1",
+        "apiKey": ""
+      },
+      "models": {
+        "claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  },
+  "model": "llm-proxy/claude-sonnet-4-6",
+  "default_agent": "assistant",
+  "share": "disabled",
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "websearch": "allow",
+    "webfetch": "allow",
+    "edit": "ask",
+    "bash": "ask"
+  },
+  "agent": {
+    "build": { "disable": true },
+    "plan": { "disable": true },
+    "explore": { "disable": true }
+  }
+}
