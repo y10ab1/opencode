@@ -29,7 +29,7 @@ export function SetupWizard(props: { onComplete: () => void }) {
       await globalSync.updateConfig({
         provider: {
           "llm-proxy": {
-            npm: "@ai-sdk/openai-compatible",
+            npm: "@ai-sdk/anthropic",
             name: "LLM API Proxy",
             options: {
               baseURL: "https://llm-api-proxy.gamaniaocc.org/v1",
@@ -102,7 +102,7 @@ export function SetupWizard(props: { onComplete: () => void }) {
                   </li>
                 </ul>
               </div>
-              <Button size="lg" class="w-full" onClick={() => setStep("apikey")}>
+              <Button size="large" class="w-full" onClick={() => setStep("apikey")}>
                 開始設定
               </Button>
             </div>
@@ -127,7 +127,7 @@ export function SetupWizard(props: { onComplete: () => void }) {
                 <Show when={error()}>
                   <p class="text-12-regular text-danger-base">{error()}</p>
                 </Show>
-                <Button size="lg" class="w-full" onClick={() => void saveApiKey()} disabled={saving() || !apiKey().trim()}>
+                <Button size="large" class="w-full" onClick={() => void saveApiKey()} disabled={saving() || !apiKey().trim()}>
                   {saving() ? "設定中..." : "確認"}
                 </Button>
                 <button
@@ -178,7 +178,7 @@ export function SetupWizard(props: { onComplete: () => void }) {
                   <p class="text-12-regular text-text-weak">每天下午 6 點自動產日報，每週五自動產週報</p>
                 </div>
               </label>
-              <Button size="lg" class="w-full" onClick={() => void finish()}>
+              <Button size="large" class="w-full" onClick={() => void finish()}>
                 開始使用
               </Button>
             </div>

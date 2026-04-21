@@ -15,7 +15,9 @@
 - **Desktop App**: Electron + SolidJS（`packages/desktop-electron`）
 - **Frontend**: SolidJS（`packages/app`）
 - **Core Engine**: `packages/opencode`（不修改）
-- **LLM Provider**: 公司 LLM Proxy（`@ai-sdk/openai-compatible`）
+- **LLM Provider**: 公司 LLM Proxy（`@ai-sdk/anthropic`，透傳 Anthropic 原生 API）
+
+> **重要**：公司 proxy（`llm-api-proxy.gamaniaocc.org`）返回的是 **Anthropic 原生 API 格式**，不是 OpenAI-compatible 格式。因此 `npm` 必須設為 `@ai-sdk/anthropic`，`baseURL` 設為 `https://llm-api-proxy.gamaniaocc.org/v1`。這樣 prompt caching、reasoning/thinking 等 Claude 原生功能都可以正常使用。
 
 ## 改動的檔案
 
