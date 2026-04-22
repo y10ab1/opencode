@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
+import { execFile as execFileCb } from "node:child_process"
 import { createServer } from "node:net"
-import { homedir } from "node:os"
+import { homedir, platform } from "node:os"
 import { join } from "node:path"
+import { promisify } from "node:util"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
+
+const execFileAsync = promisify(execFileCb)
 
 import contextMenu from "electron-context-menu"
 contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
@@ -36,7 +40,7 @@ const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
-import { CHANNEL, UPDATER_ENABLED } from "./constants"
+import { CHANNEL, HAS_COMPLETED_SETUP_KEY, SETTINGS_STORE, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
@@ -49,6 +53,7 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
+import { getStore } from "./store"
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import type { Server } from "virtual:opencode-server"
 
@@ -68,6 +73,44 @@ logger.log("app starting", {
   version: app.getVersion(),
   packaged: app.isPackaged,
 })
+
+let isFirstRun = false
+
+function copyDirRecursive(src: string, dest: string, overwrite: boolean) {
+  mkdirSync(dest, { recursive: true })
+  for (const entry of readdirSync(src)) {
+    const srcPath = join(src, entry)
+    const destPath = join(dest, entry)
+    if (statSync(srcPath).isDirectory()) {
+      copyDirRecursive(srcPath, destPath, overwrite)
+    } else {
+      if (!overwrite && existsSync(destPath)) continue
+      copyFileSync(srcPath, destPath)
+    }
+  }
+}
+
+function getConfigDir() {
+  if (platform() === "win32") {
+    return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "opencode")
+  }
+  return join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode")
+}
+
+function deployBundledConfigs() {
+  const resourcePath = app.isPackaged
+    ? join(process.resourcesPath, "opencode-defaults")
+    : join(__dirname, "../../resources/opencode-defaults")
+
+  if (!existsSync(resourcePath)) {
+    logger.log("bundled configs not found, skipping deployment", { resourcePath })
+    return
+  }
+
+  const targetPath = getConfigDir()
+  logger.log("deploying bundled configs", { from: resourcePath, to: targetPath })
+  copyDirRecursive(resourcePath, targetPath, false)
+}
 
 setupApp()
 
@@ -210,6 +253,14 @@ async function initialize() {
     await loadingComplete.promise
   }
 
+  const store = getStore(SETTINGS_STORE)
+  isFirstRun = !store.get(HAS_COMPLETED_SETUP_KEY)
+
+  if (isFirstRun) {
+    deployBundledConfigs()
+    logger.log("first run detected, bundled configs deployed")
+  }
+
   mainWindow = createMainWindow()
   wireMenu()
 
@@ -247,7 +298,7 @@ registerIpcHandlers({
       initEmitter.off("step", listener)
     }
   },
-  getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
+  getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED, isFirstRun }),
   consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
   getDefaultServerUrl: () => getDefaultServerUrl(),
   setDefaultServerUrl: (url) => setDefaultServerUrl(url),
@@ -264,6 +315,54 @@ registerIpcHandlers({
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
   setBackgroundColor: (color) => setBackgroundColor(color),
+  completeSetup: () => {
+    const store = getStore(SETTINGS_STORE)
+    store.set(HAS_COMPLETED_SETUP_KEY, true)
+    isFirstRun = false
+    logger.log("setup completed, marked in store")
+  },
+  setupAutoReports: async (enabled: boolean) => {
+    logger.log("setupAutoReports", { enabled, platform: platform() })
+    if (!enabled) return
+
+    const opencodePath = (() => {
+      const localBin = join(homedir(), ".opencode", "bin", "opencode")
+      if (existsSync(localBin)) return localBin
+      return "opencode"
+    })()
+
+    if (platform() === "darwin" || platform() === "linux") {
+      try {
+        const { stdout } = await execFileAsync("crontab", ["-l"]).catch(() => ({ stdout: "" }))
+        const existing = stdout.split("\n").filter((line) => !line.includes("opencode run --command"))
+        const crontab = [
+          ...existing.filter((l) => l.trim()),
+          `0 18 * * * cd ~ && ${opencodePath} run --command daily-report 2>/dev/null`,
+          `0 18 * * 5 cd ~ && ${opencodePath} run --command weekly-report 2>/dev/null`,
+        ].join("\n") + "\n"
+        await execFileAsync("bash", ["-c", `echo "${crontab.replace(/"/g, '\\"')}" | crontab -`])
+        logger.log("cron jobs installed for auto-reports")
+      } catch (err) {
+        logger.error("failed to install cron jobs", err)
+      }
+    } else if (platform() === "win32") {
+      try {
+        await execFileAsync("schtasks", [
+          "/Create", "/F", "/SC", "DAILY", "/TN", "OpenCodeDailyReport",
+          "/TR", `"${opencodePath}" run --command daily-report`,
+          "/ST", "18:00",
+        ])
+        await execFileAsync("schtasks", [
+          "/Create", "/F", "/SC", "WEEKLY", "/TN", "OpenCodeWeeklyReport",
+          "/TR", `"${opencodePath}" run --command weekly-report`,
+          "/ST", "18:00", "/D", "FRI",
+        ])
+        logger.log("Windows scheduled tasks created for auto-reports")
+      } catch (err) {
+        logger.error("failed to create Windows scheduled tasks", err)
+      }
+    }
+  },
 })
 
 function killSidecar() {

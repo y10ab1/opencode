@@ -17,6 +17,7 @@ export type TitlebarTheme = {
 
 export type WindowConfig = {
   updaterEnabled: boolean
+  isFirstRun: boolean
 }
 
 export type ElectronAPI = {
@@ -41,6 +42,8 @@ export type ElectronAPI = {
   storeClear: (name: string) => Promise<void>
   storeKeys: (name: string) => Promise<string[]>
   storeLength: (name: string) => Promise<number>
+  completeSetup: () => Promise<void>
+  setupAutoReports: (enabled: boolean) => Promise<void>
 
   getWindowCount: () => Promise<number>
   onSqliteMigrationProgress: (cb: (progress: SqliteMigrationProgress) => void) => () => void

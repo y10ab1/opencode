@@ -253,7 +253,7 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
-  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
+  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false, isFirstRun: false })))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -340,11 +340,13 @@ render(() => {
           }
         >
           {(_) => {
+            const config = windowConfig()
             return (
               <AppInterface
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
                 router={MemoryRouter}
+                isFirstRun={config?.isFirstRun}
               >
                 <Inner />
               </AppInterface>

@@ -38,6 +38,8 @@ type Deps = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
+  completeSetup: () => void
+  setupAutoReports: (enabled: boolean) => Promise<void>
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -69,6 +71,8 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  ipcMain.handle("complete-setup", () => deps.completeSetup())
+  ipcMain.handle("setup-auto-reports", (_event: IpcMainInvokeEvent, enabled: boolean) => deps.setupAutoReports(enabled))
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     const store = getStore(name)
     const value = store.get(key)
