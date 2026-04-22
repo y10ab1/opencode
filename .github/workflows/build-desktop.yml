@@ -1,0 +1,75 @@
+name: build-desktop
+run-name: "Build Desktop App"
+
+on:
+  push:
+    branches:
+      - dev
+      - feature/*
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-electron:
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            platform_flag: --mac --arm64
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            platform_flag: --mac --x64
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform_flag: --win
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: bun install
+        shell: bash
+
+      - name: Build opencode node sidecar
+        run: bun script/build-node.ts
+        working-directory: packages/opencode
+
+      - name: Copy icons
+        run: bun ./scripts/copy-icons.ts dev
+        working-directory: packages/desktop-electron
+
+      - name: Build Electron app
+        run: bun run build
+        working-directory: packages/desktop-electron
+
+      - name: Package (unsigned)
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop-electron
+        timeout-minutes: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-${{ matrix.settings.target }}
+          path: |
+            packages/desktop-electron/dist/*.dmg
+            packages/desktop-electron/dist/*.zip
+            packages/desktop-electron/dist/*.exe
+            packages/desktop-electron/dist/*.msi
+            packages/desktop-electron/dist/*.AppImage
+          retention-days: 30
